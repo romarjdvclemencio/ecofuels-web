@@ -1,18 +1,23 @@
 rules_version = '2';
 
 // ============================================================
-// ECOFUELS Attendance System — Hardened Storage Rules
+// ECOFUELS Attendance System — Storage Rules
+// Branch: security/remediation-round-2
+//
+// FIX: Admin authorization now uses Firestore record check
+// instead of custom claims. Custom claims require Admin SDK
+// setup which is not yet configured. This is consistent with
+// how Firestore rules authorize admins.
+//
+// NOTE: Firebase Storage is not currently enabled on the
+// economercadofuel project (photos stored as base64 in
+// Firestore). These rules are prepared for when Storage is
+// enabled. They will NOT take effect until Storage is activated
+// in Firebase Console.
 // ============================================================
 
 service firebase.storage {
   match /b/{bucket}/o {
-
-    // Helper: check admin via custom claim (set via Admin SDK)
-    // Falls back gracefully if claims aren't set yet.
-    function isAuthenticatedAdmin() {
-      return request.auth != null
-        && request.auth.token.get('role', '') == 'admin';
-    }
 
     // Max file size: 500KB (photos are resized client-side before upload)
     function isValidSize() {
@@ -22,40 +27,43 @@ service firebase.storage {
     // Only allow JPEG and PNG images
     function isValidImage() {
       return request.resource.contentType.matches('image/jpeg')
-          || request.resource.contentType.matches('image/png');
+          || request.resource.contentType.matches('image/png')
+          || request.resource.contentType.matches('image/jpg');
     }
 
     // ---- Employee reference photos ----
-    // Path: employee_photos/{uid}.jpg
+    // Path: employee_photos/{filename}
+    // Admin writes only. All authenticated users can read.
     match /employee_photos/{fileName} {
-      // Read: any authenticated user (photos shown in chat, attendance table, etc.)
-      allow read: if request.auth != null;
-
-      // Write: admin only, valid image, within size limit
-      allow write: if isAuthenticatedAdmin()
-        && isValidImage()
-        && isValidSize();
-
-      // Delete: admin only
-      allow delete: if isAuthenticatedAdmin();
+      allow read:  if request.auth != null;
+      allow write: if request.auth != null
+                   && isValidImage()
+                   && isValidSize()
+                   && firestore.get(
+                        /databases/(default)/documents/users/$(request.auth.uid)
+                      ).data.role == 'admin'
+                   && firestore.get(
+                        /databases/(default)/documents/users/$(request.auth.uid)
+                      ).data.active == true;
+      allow delete: if request.auth != null
+                    && firestore.get(
+                         /databases/(default)/documents/users/$(request.auth.uid)
+                       ).data.role == 'admin';
     }
 
     // ---- Attendance selfie photos ----
-    // Path: attendance_photos/{uid}_{timestamp}.jpg
+    // Path: attendance_photos/{filename}
+    // Any authenticated user may write their own attendance photo.
+    // Reads: authenticated users only (admin + employee for own records).
     match /attendance_photos/{fileName} {
-      // Read: authenticated users (admin and employee can view own records)
-      allow read: if request.auth != null;
-
-      // Write: authenticated user, valid image, size limit
-      // The filename is generated client-side — the UID prefix is not enforced
-      // here because photos are stored as base64 in Firestore (Storage not used
-      // in current implementation). Rules kept for future use.
+      allow read:  if request.auth != null;
       allow write: if request.auth != null
-        && isValidImage()
-        && isValidSize();
-
-      // Delete: admin only
-      allow delete: if isAuthenticatedAdmin();
+                   && isValidImage()
+                   && isValidSize();
+      allow delete: if request.auth != null
+                    && firestore.get(
+                         /databases/(default)/documents/users/$(request.auth.uid)
+                       ).data.role == 'admin';
     }
 
     // ---- Deny everything else ----

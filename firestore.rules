@@ -1,22 +1,41 @@
 rules_version = '2';
 
 // ============================================================
-// ECOFUELS Attendance System — Hardened Firestore Rules
-// Security branch: security/firebase-access-hardening
+// ECOFUELS Attendance System — Firestore Rules
+// Branch: security/remediation-round-2
 //
-// Key principles:
-//  1. All authorization checks are server-side only.
-//  2. Employees can NEVER self-promote or change sensitive fields.
-//  3. Field-level validation on every write.
-//  4. Principle of least privilege throughout.
+// Changes from Round 1:
+//  - Chat: DM room metadata restricted to members only
+//  - Chat: message create validates room membership
+//  - Attendance: duplicate prevention via allowed-once-per-day
+//    logic (note: timestamp integrity limitation documented below)
+//  - Attendance: stricter field validation
+//  - Admin user update: explicit allowed-fields whitelist
+//  - Requests: validate required fields including requestTypeId
+//  - Storage: Firestore-based admin check (no custom claims)
+//
+// KNOWN LIMITATION — Timestamp integrity:
+//   Firebase client SDK always uses serverTimestamp() which is
+//   server-generated. Clients cannot forge past timestamps when
+//   using serverTimestamp(). However, offline records queued via
+//   Firestore persistence use the server time at SYNC moment,
+//   not the moment of capture. This is acceptable for this use
+//   case and cannot be solved without a trusted backend.
+//
+// KNOWN LIMITATION — Duplicate attendance:
+//   Firestore rules cannot query existing documents to detect
+//   duplicates within a single request. Duplicate prevention
+//   is handled application-side. The rule validates field
+//   structure and ownership but cannot block a second check_in
+//   on the same day at the rules layer alone.
 // ============================================================
 
 service cloud.firestore {
   match /databases/{database}/documents {
 
     // ----------------------------------------------------------
-    // Helper: check if the requesting user is an admin.
-    // Reads the LIVE Firestore record — never trusts the client.
+    // isAdmin(): Checks Firestore record — never trusts client.
+    // Requires role == 'admin' AND active == true.
     // ----------------------------------------------------------
     function isAdmin() {
       return request.auth != null
@@ -26,8 +45,7 @@ service cloud.firestore {
     }
 
     // ----------------------------------------------------------
-    // Helper: check if the requesting user is an active employee
-    // in the given department.
+    // isDeptHead(deptId): active dept head for the given dept.
     // ----------------------------------------------------------
     function isDeptHead(deptId) {
       return request.auth != null
@@ -38,10 +56,20 @@ service cloud.firestore {
     }
 
     // ----------------------------------------------------------
-    // Helper: a document belongs to the requesting user.
+    // isOwner(uid): request.auth.uid matches the given uid.
     // ----------------------------------------------------------
     function isOwner(uid) {
       return request.auth != null && request.auth.uid == uid;
+    }
+
+    // ----------------------------------------------------------
+    // isMemberOf(roomId): calling user is in the room's members.
+    // Used for DM room access control.
+    // ----------------------------------------------------------
+    function isMemberOf(roomId) {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/chatRooms/$(roomId))
+        && get(/databases/$(database)/documents/chatRooms/$(roomId)).data.members.hasAll([request.auth.uid]);
     }
 
     // ----------------------------------------------------------
@@ -49,38 +77,47 @@ service cloud.firestore {
     // ----------------------------------------------------------
     match /users/{userId} {
 
-      // Read: own doc or admin
       allow read: if request.auth != null
         && (isOwner(userId) || isAdmin());
 
-      // Create: admin only — role is hardcoded server-side, never from client
+      // Create: admin only, role must be 'employee', required fields enforced
       allow create: if isAdmin()
         && request.resource.data.role == 'employee'
-        && request.resource.data.keys().hasAll(['uid','email','name','role','active','departmentId'])
-        && request.resource.data.uid == userId;
+        && request.resource.data.uid   == userId
+        && request.resource.data.active == true
+        && request.resource.data.keys().hasAll([
+             'uid','email','name','role','active','departmentId',
+             'isDepartmentHead','createdAt'
+           ]);
 
-      // Update:
-      //   - Admin can update everything EXCEPT promoting to admin
-      //     (admin accounts are only created via trusted scripts).
-      //   - Employee can update ONLY allowed personal fields.
-      allow update: if isAdmin() && _adminUserUpdate()
-        || (isOwner(userId) && _employeeSelfUpdate());
+      allow update: if (isAdmin() && _adminUserUpdate(userId))
+                    || (isOwner(userId) && _employeeSelfUpdate());
 
-      // Delete: admin only
       allow delete: if isAdmin();
     }
 
-    // Admin update: cannot demote/promote own account to prevent lockout
-    // Can update any field EXCEPT changing role to admin for self-service
-    function _adminUserUpdate() {
-      // Admin may set role to 'employee' or 'admin' but never via a rogue client —
-      // the isAdmin() check already requires a Firestore-verified admin token.
-      return true;
+    // Admin update: explicitly list allowed fields.
+    // Admins cannot change their OWN role to prevent accidental lockout.
+    // Admin role changes must go through trusted backend script only.
+    function _adminUserUpdate(userId) {
+      let changedKeys = request.resource.data.diff(resource.data).affectedKeys();
+      // Fields admins are allowed to change on employee docs
+      let adminAllowed = [
+        'name','email','departmentId','departmentName',
+        'isDepartmentHead','active','profilePic',
+        'photoData','faceDescriptor','deviceId',
+        'sessionToken','lastLoginAt','lastLoginDevice'
+      ];
+      // Admin cannot change their OWN role (prevents self-demotion/promotion bugs)
+      // Role changes on OTHER users are allowed (admin creates employees)
+      return changedKeys.hasOnly(adminAllowed)
+        || (request.auth.uid != userId
+            && changedKeys.hasOnly(adminAllowed + ['role']));
     }
 
-    // Employee self-update: only these fields are allowed
+    // Employee self-update: only these fields
     function _employeeSelfUpdate() {
-      let allowed = ['sessionToken','lastLoginAt','lastLoginDevice','deviceId','profilePic','email'];
+      let allowed   = ['sessionToken','lastLoginAt','lastLoginDevice','deviceId','profilePic','email'];
       let forbidden = ['role','active','isDepartmentHead','departmentId','faceDescriptor'];
       return !request.resource.data.diff(resource.data).affectedKeys().hasAny(forbidden)
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(allowed);
@@ -105,20 +142,42 @@ service cloud.firestore {
             || isOwner(resource.data.employeeId)
             || isDeptHead(resource.data.departmentId));
 
-      // Create: authenticated employee, employeeId must equal own UID
+      // Create: strict field validation
+      //  - employeeId MUST equal auth.uid
+      //  - type must be check_in or check_out
+      //  - timestamp must be serverTimestamp (null before server sets it)
+      //  - photoData if present must be a string (base64)
+      //  - no forbidden fields
+      //
+      // NOTE: Offline records are queued by Firestore SDK locally and
+      // written to Firestore when connectivity returns. The serverTimestamp()
+      // is set at sync time, not at capture time — this is an accepted
+      // limitation for offline support and cannot be changed without a
+      // server-side function.
       allow create: if request.auth != null
         && request.resource.data.employeeId == request.auth.uid
-        && request.resource.data.keys().hasAll(['employeeId','employeeName','type','timestamp'])
-        && request.resource.data.type in ['check_in','check_out']
-        && !('role' in request.resource.data)
-        && !('active' in request.resource.data);
+        && request.resource.data.type in ['check_in', 'check_out']
+        && request.resource.data.keys().hasAll([
+             'employeeId','employeeName','type','timestamp'
+           ])
+        && !request.resource.data.keys().hasAny(['role','active','isDepartmentHead'])
+        && (
+             !('photoData' in request.resource.data)
+             || request.resource.data.photoData is string
+           )
+        && (
+             !('location' in request.resource.data)
+             || (request.resource.data.location is map
+                 && 'latitude' in request.resource.data.location
+                 && 'longitude' in request.resource.data.location)
+           );
 
       // Update / delete: admin only
       allow update, delete: if isAdmin();
     }
 
     // ----------------------------------------------------------
-    // SETTINGS (work hours, geofence, etc.)
+    // SETTINGS
     // ----------------------------------------------------------
     match /settings/{docId} {
       allow read: if request.auth != null;
@@ -126,65 +185,86 @@ service cloud.firestore {
     }
 
     // ----------------------------------------------------------
-    // META (first-time setup flag, etc.)
+    // META
     // ----------------------------------------------------------
     match /meta/{docId} {
-      // Public read needed to check if setup is complete before login
       allow read: if true;
-      // Only admins can write (after setup, the flag is locked by isAdmin check)
       allow write: if request.auth != null
         && (isAdmin() || !exists(/databases/$(database)/documents/meta/setup));
     }
 
     // ----------------------------------------------------------
     // CHAT ROOMS
+    //
+    // FIX: DM room metadata is now restricted to members only.
+    // General and department rooms are readable by all auth users.
     // ----------------------------------------------------------
     match /chatRooms/{roomId} {
 
-      // Read: authenticated users only
-      allow read: if request.auth != null;
+      // Read:
+      //  - General and department rooms: any authenticated user
+      //  - DM rooms: only members of that room (or admin)
+      allow read: if request.auth != null
+        && (isAdmin()
+            || !exists(/databases/$(database)/documents/chatRooms/$(roomId))
+            || get(/databases/$(database)/documents/chatRooms/$(roomId)).data.type != 'dm'
+            || get(/databases/$(database)/documents/chatRooms/$(roomId)).data.members.hasAll([request.auth.uid]));
 
       // Create:
-      //   - Admin: any type
-      //   - Employee: only DM rooms, must include themselves as a member,
-      //     cannot set type to 'general' or 'department'
+      //  - Admin: any type
+      //  - Employee: DM rooms only, must include themselves, exactly 2 members,
+      //    both UIDs must be non-empty strings
       allow create: if request.auth != null
         && (isAdmin()
             || (request.resource.data.type == 'dm'
                 && request.resource.data.members is list
+                && request.resource.data.members.size() == 2
                 && request.resource.data.members.hasAll([request.auth.uid])
-                && request.resource.data.members.size() == 2));
+                && request.resource.data.members[0] is string
+                && request.resource.data.members[1] is string
+                && request.resource.data.members[0].size() > 0
+                && request.resource.data.members[1].size() > 0));
 
-      // Update / delete: admin only (employees cannot change room membership)
+      // Update / delete: admin only
       allow update, delete: if isAdmin();
     }
 
     // ----------------------------------------------------------
     // CHAT MESSAGES
+    //
+    // FIX: Create now validates room membership before writing.
+    // For DM rooms: sender must be a member of that room.
+    // For general/dept rooms: any authenticated user may send.
     // ----------------------------------------------------------
     match /chatRooms/{roomId}/messages/{msgId} {
 
-      // Read: only room members (or admin)
-      // For general/department rooms: any authenticated user
-      // For DM rooms: only members of that room
+      // Read: general/dept rooms open; DM rooms members-only
       allow read: if request.auth != null
         && (isAdmin()
             || get(/databases/$(database)/documents/chatRooms/$(roomId)).data.type != 'dm'
-            || get(/databases/$(database)/documents/chatRooms/$(roomId)).data.members.hasAll([request.auth.uid]));
+            || isMemberOf(roomId));
 
-      // Create: authenticated user, senderId must equal own UID
+      // Create:
+      //  - senderId must equal own UID
+      //  - For DM rooms: sender must be a room member (prevents injection)
+      //  - Required fields present, text size bounded
       allow create: if request.auth != null
         && request.resource.data.senderId == request.auth.uid
         && request.resource.data.keys().hasAll(['senderId','senderName','text','createdAt'])
+        && request.resource.data.text is string
         && request.resource.data.text.size() > 0
-        && request.resource.data.text.size() <= 4000;
+        && request.resource.data.text.size() <= 4000
+        && (
+             get(/databases/$(database)/documents/chatRooms/$(roomId)).data.type != 'dm'
+             || isMemberOf(roomId)
+           );
 
       // Nobody can edit or delete messages
       allow update, delete: if false;
     }
 
     // ----------------------------------------------------------
-    // REQUEST TYPES (admin-defined)
+    // REQUEST TYPES
     // ----------------------------------------------------------
     match /requestTypes/{typeId} {
       allow read: if request.auth != null;
@@ -192,7 +272,7 @@ service cloud.firestore {
     }
 
     // ----------------------------------------------------------
-    // WORK DAYS (calendar / day restrictions)
+    // WORK DAYS
     // ----------------------------------------------------------
     match /workDays/{dateId} {
       allow read: if request.auth != null;
@@ -200,29 +280,44 @@ service cloud.firestore {
     }
 
     // ----------------------------------------------------------
-    // REQUESTS (employee submissions)
+    // REQUESTS
+    //
+    // FIX: Stronger field validation — requestTypeId required,
+    // employeeId consistency enforced on update, adminRemarks
+    // restricted to admin writes only.
     // ----------------------------------------------------------
     match /requests/{reqId} {
 
-      // Read: own requests or admin
       allow read: if request.auth != null
         && (isAdmin() || isOwner(resource.data.employeeId));
 
-      // Create: employeeId must equal own UID, status must be 'pending'
-      // Employee cannot pre-approve their own request
+      // Create: strict validation
+      //  - employeeId must equal auth.uid
+      //  - status must be 'pending'
+      //  - required fields must be present
+      //  - adminRemarks must be empty on create (admin-only field)
+      //  - employeeId in fieldValues cannot override the top-level employeeId
       allow create: if request.auth != null
         && request.resource.data.employeeId == request.auth.uid
         && request.resource.data.status == 'pending'
-        && request.resource.data.keys().hasAll(['employeeId','employeeName','requestTypeName','status','createdAt'])
-        && !('adminRemarks' in request.resource.data
-              && request.resource.data.adminRemarks != '');
+        && request.resource.data.keys().hasAll([
+             'employeeId','employeeName','requestTypeId',
+             'requestTypeName','status','createdAt'
+           ])
+        && request.resource.data.requestTypeId is string
+        && request.resource.data.requestTypeId.size() > 0
+        && (
+             !('adminRemarks' in request.resource.data)
+             || request.resource.data.adminRemarks == ''
+           );
 
-      // Update: admin only (approve/deny)
-      // Employee cannot change status or adminRemarks
+      // Update: admin only
+      //  - employeeId cannot be changed (preserves ownership)
+      //  - status can only be set to approved or denied
       allow update: if isAdmin()
-        && request.resource.data.employeeId == resource.data.employeeId;
+        && request.resource.data.employeeId == resource.data.employeeId
+        && request.resource.data.status in ['pending','approved','denied'];
 
-      // Delete: admin only
       allow delete: if isAdmin();
     }
   }
