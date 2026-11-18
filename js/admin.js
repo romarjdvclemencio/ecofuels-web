@@ -836,8 +836,18 @@ async function saveEmployee(e) {
 
     const dept = _departments.find((d) => d.id === deptId);
 
+    // Input validation before writing
+    if (!name || name.length < 2 || name.length > 100) {
+      hideLoading(btn); showToast("Name must be 2-100 characters.", "error"); return;
+    }
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      hideLoading(btn); showToast("Invalid email address.", "error"); return;
+    }
+    if (!deptId) {
+      hideLoading(btn); showToast("Please select a department.", "error"); return;
+    }
+
     // Guard: ensure photo fits within Firestore 1MB doc limit
-    // base64 overhead is ~1.37x, so 700KB base64 ≈ 950KB in doc
     let photoToSave = _empPhotoDataUrl;
     if (photoToSave && photoToSave.length > 700000) {
       photoToSave = await _resizeImage(photoToSave, 120, 120);
