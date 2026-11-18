@@ -1,0 +1,22 @@
+# Node
+node_modules/
+temp_*/
+package-lock.json
+package.json
+
+# Firebase
+.firebase/
+firebase-debug.log
+firestore-debug.log
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# One-time scripts
+create-admin*.js
+create-ceo*.js
+
+# Duplicate logo
+new logo.jpg

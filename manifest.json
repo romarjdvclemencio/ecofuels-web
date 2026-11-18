@@ -1,0 +1,18 @@
+{
+  "name": "Eco Fuels Attendance",
+  "short_name": "EcoFuels",
+  "description": "Eco Fuels Company Attendance System",
+  "start_url": "/index.html",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#ffffff",
+  "theme_color": "#16a34a",
+  "icons": [
+    {
+      "src": "icons/logo.jpg",
+      "sizes": "400x400",
+      "type": "image/jpeg",
+      "purpose": "any maskable"
+    }
+  ]
+}

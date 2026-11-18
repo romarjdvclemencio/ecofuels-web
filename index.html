@@ -1,0 +1,110 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Attendance System — Login</title>
+  <link rel="icon" href="icons/logo.jpg" type="image/jpeg" />
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#16a34a" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="EcoFuels" />
+  <link rel="apple-touch-icon" href="icons/logo.jpg" />
+  <link rel="stylesheet" href="css/style.css" />
+  <style>
+    body {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      background: linear-gradient(135deg, #16a34a 0%, #15803d 100%);
+      min-height: 100vh;
+    }
+    .login-wrapper { width: 100%; max-width: 400px; }
+    .login-logo {
+      text-align: center;
+      margin-bottom: 28px;
+      color: #fff;
+    }
+    .login-logo h1 { font-size: 1.75rem; letter-spacing: .02em; }
+    .login-logo p  { font-size: .85rem; opacity: .85; margin-top: 6px; }
+    .login-card    { padding: 36px; }
+    .login-card h2 { font-size: 1.3rem; margin-bottom: 6px; }
+    .login-card .subtitle {
+      color: var(--text-light);
+      font-size: .85rem;
+      margin-bottom: 28px;
+    }
+  </style>
+</head>
+<body>
+  <!-- PWA Install Banner -->
+  <div class="install-banner" id="installBanner">
+    <img src="icons/logo.jpg" alt="Eco Fuels" style="height:40px;border-radius:6px;flex-shrink:0;" />
+    <div class="install-banner__text">
+      <strong>Install Eco Fuels Attendance</strong>
+      Add to your home screen for quick access
+    </div>
+    <div class="install-banner__actions">
+      <button class="install-btn" id="installBtn">Install</button>
+      <button class="install-dismiss" id="installDismiss">&times;</button>
+    </div>
+  </div>
+
+  <!-- Offline banner -->
+  <div class="offline-banner hidden" id="offlineBanner" style="position:fixed;top:0;left:0;right:0;z-index:9999;">
+    No internet connection.
+  </div>
+
+  <div class="login-wrapper">
+
+    <div class="login-logo">
+      <img src="icons/logo.jpg" alt="Eco Fuels" style="width:160px;border-radius:12px;margin-bottom:8px;" />
+      <p>Attendance System</p>
+    </div>
+
+    <div id="configWarning" class="config-warning hidden">
+      Firebase is not configured. Edit <code>js/firebase-config.js</code> with your project credentials.
+    </div>
+
+    <div class="card login-card">
+      <h2>Welcome Back</h2>
+      <p class="subtitle">Sign in to your account</p>
+      <form id="loginForm">
+        <div class="form-group">
+          <label for="loginEmail">Email</label>
+          <input type="email" id="loginEmail" placeholder="email@example.com"
+            required autocomplete="username" />
+        </div>
+        <div class="form-group">
+          <label for="loginPassword">Password</label>
+          <input type="password" id="loginPassword" placeholder="••••••••"
+            required autocomplete="current-password" />
+        </div>
+        <button type="submit" class="btn btn--primary btn--block btn--lg" id="loginBtn">
+          Sign In
+        </button>
+      </form>
+    </div>
+
+  </div>
+
+  <!-- Firebase -->
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
+  <script src="js/firebase-config.js"></script>
+  <script src="js/utils.js" defer></script>
+  <script src="js/auth.js" defer></script>
+  <script>
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("/sw.js");
+    }
+  </script>
+  <script src="js/pwa-install.js"></script>
+</body>
+</html>
