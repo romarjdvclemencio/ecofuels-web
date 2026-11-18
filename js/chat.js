@@ -402,7 +402,7 @@ async function sendMessage() {
   try {
     await db.collection("chatRooms").doc(_activeRoomId)
       .collection("messages").add({
-        senderId:         _chatUser.uid,
+        senderId:         auth.currentUser.uid,  // always from Auth
         senderName:       _chatUser.name,
         senderDepartment: _chatUser.departmentName || "",
         senderInitials:   _initials(_chatUser.name),

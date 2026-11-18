@@ -1,18 +1,66 @@
 rules_version = '2';
 
+// ============================================================
+// ECOFUELS Attendance System — Hardened Storage Rules
+// ============================================================
+
 service firebase.storage {
   match /b/{bucket}/o {
 
-    // Employee reference photos (uploaded by admin during account creation)
-    match /employee_photos/{allPaths=**} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null;
+    // Helper: check admin via custom claim (set via Admin SDK)
+    // Falls back gracefully if claims aren't set yet.
+    function isAuthenticatedAdmin() {
+      return request.auth != null
+        && request.auth.token.get('role', '') == 'admin';
     }
 
-    // Attendance photos (uploaded by employees during check-in / check-out)
-    match /attendance_photos/{allPaths=**} {
+    // Max file size: 500KB (photos are resized client-side before upload)
+    function isValidSize() {
+      return request.resource.size <= 500 * 1024;
+    }
+
+    // Only allow JPEG and PNG images
+    function isValidImage() {
+      return request.resource.contentType.matches('image/jpeg')
+          || request.resource.contentType.matches('image/png');
+    }
+
+    // ---- Employee reference photos ----
+    // Path: employee_photos/{uid}.jpg
+    match /employee_photos/{fileName} {
+      // Read: any authenticated user (photos shown in chat, attendance table, etc.)
       allow read: if request.auth != null;
-      allow write: if request.auth != null;
+
+      // Write: admin only, valid image, within size limit
+      allow write: if isAuthenticatedAdmin()
+        && isValidImage()
+        && isValidSize();
+
+      // Delete: admin only
+      allow delete: if isAuthenticatedAdmin();
+    }
+
+    // ---- Attendance selfie photos ----
+    // Path: attendance_photos/{uid}_{timestamp}.jpg
+    match /attendance_photos/{fileName} {
+      // Read: authenticated users (admin and employee can view own records)
+      allow read: if request.auth != null;
+
+      // Write: authenticated user, valid image, size limit
+      // The filename is generated client-side — the UID prefix is not enforced
+      // here because photos are stored as base64 in Firestore (Storage not used
+      // in current implementation). Rules kept for future use.
+      allow write: if request.auth != null
+        && isValidImage()
+        && isValidSize();
+
+      // Delete: admin only
+      allow delete: if isAuthenticatedAdmin();
+    }
+
+    // ---- Deny everything else ----
+    match /{allPaths=**} {
+      allow read, write: if false;
     }
   }
 }

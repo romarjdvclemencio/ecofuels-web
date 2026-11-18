@@ -156,7 +156,7 @@ async function submitRequest(e) {
 
   try {
     await db.collection("requests").add({
-      employeeId:      _user.uid,
+      employeeId:      auth.currentUser.uid,  // always from Auth, never from client input
       employeeName:    _user.name,
       departmentId:    _user.departmentId   || null,
       departmentName:  _user.departmentName || "",

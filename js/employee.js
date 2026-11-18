@@ -565,7 +565,9 @@ async function _processAttendance(type) {
     }
 
     const recordData = {
-      employeeId:     _user.uid,
+      // Always use auth.currentUser.uid — never trust _user.uid alone
+      // This prevents any client-side manipulation of the employeeId
+      employeeId:     auth.currentUser.uid,
       employeeName:   _user.name,
       departmentId:   _user.departmentId   || null,
       departmentName: _user.departmentName || "",

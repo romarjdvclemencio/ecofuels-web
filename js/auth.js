@@ -18,11 +18,14 @@ document.addEventListener("DOMContentLoaded", () => {
       _authHandled = true;
 
       if (!navigator.onLine) {
+        // NOTE: localStorage role is used only for routing, NOT for authorization.
+        // Both admin.html and employee.html re-verify role from Firestore on load.
+        // An attacker who changes localStorage to "admin" will be redirected
+        // to admin.html but immediately bounced back when Firestore confirms
+        // they are not an admin.
         const cachedRole = localStorage.getItem(CACHED_ROLE_KEY);
-        if (cachedRole === "admin") {
-          window.location.href = "admin.html";
-        } else if (cachedRole === "employee") {
-          window.location.href = "employee.html";
+        if (cachedRole === "admin" || cachedRole === "employee") {
+          window.location.href = cachedRole === "admin" ? "admin.html" : "employee.html";
         } else {
           _authHandled = false;
           _showError("You are offline. Please connect to the internet for your first login.");
