@@ -70,29 +70,54 @@
         </div>
       </div>
 
-      <!-- Camera + check in/out -->
-      <div class="card emp-camera-card">
-        <h3 class="mb-4">Take Attendance</h3>
-        <div class="camera-stage">
-          <video id="camera" autoplay playsinline muted></video>
-          <canvas id="captureCanvas" class="hidden"></canvas>
-          <div class="camera-overlay" id="cameraOverlay">
-            <div class="camera-placeholder">
-              <p>Click "Start Camera" to begin</p>
+      <div class="attendance-workspace">
+        <!-- Camera + check in/out -->
+        <div class="card emp-camera-card">
+          <h3 class="mb-4">Take Attendance</h3>
+          <div class="camera-stage">
+            <video id="camera" autoplay playsinline muted></video>
+            <canvas id="captureCanvas" class="hidden"></canvas>
+            <div class="camera-overlay" id="cameraOverlay">
+              <div class="camera-placeholder">
+                <p>Click "Start Camera" to begin</p>
+              </div>
             </div>
           </div>
-        </div>
-        <div class="camera-controls mt-4">
-          <button class="btn btn--secondary" id="startCamBtn" onclick="startCamera()">Start Camera</button>
-          <div id="attendanceBtns" style="display:none;flex-direction:column;align-items:center;gap:12px;width:100%;">
-            <p class="text-sm text-light mb-2" style="margin:0;">What would you like to record?</p>
-            <div class="flex gap-2" style="width:100%;justify-content:center;">
-              <button class="btn btn--success btn--lg" id="checkInBtn" onclick="doCheckIn()" style="flex:1;max-width:200px;">Check In</button>
-              <button class="btn btn--secondary btn--lg" id="checkOutBtn" onclick="doCheckOut()" style="flex:1;max-width:200px;">Check Out</button>
+          <div class="camera-controls mt-4">
+            <button class="btn btn--secondary" id="startCamBtn" onclick="startCamera()">Start Camera</button>
+            <div id="attendanceBtns" style="display:none;flex-direction:column;align-items:center;gap:12px;width:100%;">
+              <p class="text-sm text-light mb-2" style="margin:0;">What would you like to record?</p>
+              <div class="flex gap-2" style="width:100%;justify-content:center;">
+                <button class="btn btn--success btn--lg" id="checkInBtn" onclick="doCheckIn()" style="flex:1;max-width:200px;">Check In</button>
+                <button class="btn btn--secondary btn--lg" id="checkOutBtn" onclick="doCheckOut()" style="flex:1;max-width:200px;">Check Out</button>
+              </div>
             </div>
           </div>
+          <div class="form-hint mt-2" id="faceHint"></div>
         </div>
-        <div class="form-hint mt-2" id="faceHint"></div>
+
+        <!-- Experimental daily time record -->
+        <div class="card emp-daily-record">
+          <div class="emp-daily-record__heading">
+            <h3>Daily Time Record</h3>
+            <span class="badge badge--gray">Experimental</span>
+          </div>
+          <p class="text-sm text-light mb-4" id="todayRecordDate">Today</p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Check In</th>
+                  <th>Check Out</th>
+                  <th>Hours</th>
+                </tr>
+              </thead>
+              <tbody id="todayRecordBody">
+                <tr><td colspan="3" class="text-center text-light">Loading...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
 
       <!-- Attendance History -->

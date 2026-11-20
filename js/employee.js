@@ -363,8 +363,37 @@ async function checkTodayStatus() {
         checkOut: records.find((r) => r.type === "check_out") || null
       };
       _renderStatus();
+      _renderTodayRecord();
       _updateActionButtons();
     }, (err) => console.error("Status check error:", err));
+}
+
+function _renderTodayRecord() {
+  const date = document.getElementById("todayRecordDate");
+  const body = document.getElementById("todayRecordBody");
+  if (!date || !body) return;
+
+  date.textContent = formatDate(new Date());
+  const checkIn = _todayStatus?.checkIn;
+  const checkOut = _todayStatus?.checkOut;
+  let hours = "—";
+
+  if (checkIn && checkOut) {
+    const start = checkIn.timestamp?.toDate?.();
+    const end = checkOut.timestamp?.toDate?.();
+    if (start && end) {
+      const minutes = Math.max(0, Math.floor((end - start) / 60000));
+      hours = `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
+    }
+  } else if (checkIn) {
+    hours = "In progress";
+  }
+
+  body.innerHTML = `<tr>
+    <td>${checkIn ? formatTime(checkIn.timestamp) : "—"}</td>
+    <td>${checkOut ? formatTime(checkOut.timestamp) : "—"}</td>
+    <td>${hours}</td>
+  </tr>`;
 }
 
 function _renderStatus() {
