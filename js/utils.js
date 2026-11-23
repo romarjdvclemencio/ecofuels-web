@@ -35,6 +35,113 @@ function _ensureToastContainer() {
 }
 
 /* ------------------------------------------------------------------ */
+/* Manual card and panel resizing                                     */
+/* ------------------------------------------------------------------ */
+function initManualResizing() {
+  const selectors = [
+    ".card",
+    ".emp-panel",
+    ".status-card",
+    ".chat-layout",
+    ".modal",
+    ".dashboard-bottom",
+    ".attendance-workspace"
+  ].join(",");
+
+  const page = location.pathname.split("/").pop() || "index.html";
+  const storagePrefix = `ecofuels-panel-size:${page}:`;
+
+  document.querySelectorAll(selectors).forEach((panel, index) => {
+    if (panel.classList.contains("manual-resizable")) return;
+
+    panel.classList.add("manual-resizable");
+    const key = `${storagePrefix}${index}:${panel.className}`;
+
+    const saved = (() => {
+      try { return JSON.parse(localStorage.getItem(key)); }
+      catch (_) { return null; }
+    })();
+    if (saved?.width && saved?.height) {
+      panel.style.width = `${saved.width}px`;
+      panel.style.height = `${saved.height}px`;
+      panel.style.flex = "none";
+    }
+
+    const handle = document.createElement("div");
+    handle.className = "panel-resize-handle";
+    handle.setAttribute("role", "separator");
+    handle.setAttribute("aria-label", "Drag to resize panel");
+    handle.title = "Drag to resize. Double-click to reset.";
+    panel.appendChild(handle);
+
+    const resetSize = () => {
+      panel.style.removeProperty("width");
+      panel.style.removeProperty("height");
+      panel.style.removeProperty("flex");
+      localStorage.removeItem(key);
+    };
+    handle.addEventListener("dblclick", resetSize);
+
+    handle.addEventListener("pointerdown", (event) => {
+      event.preventDefault();
+      handle.setPointerCapture?.(event.pointerId);
+
+      const rect = panel.getBoundingClientRect();
+      if (!rect) return;
+      const startX = event.clientX;
+      const startY = event.clientY;
+      const startWidth = rect.width;
+      const startHeight = rect.height;
+
+      panel.style.width = `${startWidth}px`;
+      panel.style.height = `${startHeight}px`;
+      panel.style.flex = "none";
+
+      const move = (moveEvent) => {
+        const viewportWidth = document.documentElement.clientWidth;
+        const viewportHeight = document.documentElement.clientHeight;
+        const width = Math.max(240, Math.min(viewportWidth - 16, startWidth + moveEvent.clientX - startX));
+        const height = Math.max(120, Math.min(viewportHeight - 16, startHeight + moveEvent.clientY - startY));
+        panel.style.width = `${Math.round(width)}px`;
+        panel.style.height = `${Math.round(height)}px`;
+      };
+
+      const stop = () => {
+        handle.removeEventListener("pointermove", move);
+        handle.removeEventListener("pointerup", stop);
+        handle.removeEventListener("pointercancel", stop);
+        try {
+          localStorage.setItem(key, JSON.stringify({
+            width: Math.round(panel.getBoundingClientRect().width),
+            height: Math.round(panel.getBoundingClientRect().height)
+          }));
+        } catch (_) {}
+      };
+
+      handle.addEventListener("pointermove", move);
+      handle.addEventListener("pointerup", stop);
+      handle.addEventListener("pointercancel", stop);
+    });
+  });
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", () => requestAnimationFrame(initManualResizing));
+} else {
+  requestAnimationFrame(initManualResizing);
+}
+
+let manualResizeTimer = null;
+const manualResizeObserver = new MutationObserver(() => {
+  clearTimeout(manualResizeTimer);
+  manualResizeTimer = setTimeout(initManualResizing, 250);
+});
+manualResizeObserver.observe(document.documentElement, {
+  childList: true,
+  subtree: true
+});
+
+/* ------------------------------------------------------------------ */
 /* Date / time formatting                                              */
 /* ------------------------------------------------------------------ */
 

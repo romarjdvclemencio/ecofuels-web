@@ -296,6 +296,53 @@ h1, h2, h3, h4 { font-weight: 600; line-height: 1.3; }
   -webkit-overflow-scrolling: touch;
 }
 
+/* ---- Manual panel resizing ---- */
+.manual-resizable {
+  position: relative;
+  overflow: auto;
+  max-width: 100%;
+  max-height: calc(100vh - 24px);
+  max-height: calc(100dvh - 24px);
+  transition: none;
+}
+
+.panel-resize-handle {
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  z-index: 20;
+  width: 22px;
+  height: 22px;
+  cursor: nwse-resize;
+  touch-action: none;
+  opacity: .65;
+}
+
+.panel-resize-handle::before,
+.panel-resize-handle::after {
+  content: "";
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  width: 10px;
+  height: 10px;
+  border-right: 2px solid var(--text-light);
+  border-bottom: 2px solid var(--text-light);
+  pointer-events: none;
+}
+
+.panel-resize-handle::after {
+  right: 7px;
+  bottom: 7px;
+  width: 5px;
+  height: 5px;
+}
+
+.panel-resize-handle:hover,
+.panel-resize-handle:active {
+  opacity: 1;
+}
+
 table {
   width: 100%;
   border-collapse: collapse;
