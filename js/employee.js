@@ -7,6 +7,8 @@
 let _user = null;            // current user document
 let _settings = null;        // office geofence + work hours
 let _todayStatus = null;      // { checkIn: record, checkOut: record }
+let _todayRecords = [];       // all attendance records for today
+let _todayWorkDay = null;     // workDays override for today
 let _cameraStream = null;
 let _geoWatchId = null;
 let _currentLocation = null;
@@ -194,9 +196,12 @@ async function _checkTodayWorkDay() {
     const todayKey = _fmt(new Date());
     const dow      = new Date().getDay();
     const hint     = document.getElementById("faceHint");
+    _todayWorkDay = null;
 
     if (dow === 0) {
       if (hint) { hint.textContent = "Today is Sunday — no attendance."; hint.style.color = "var(--danger)"; }
+      _todayWorkDay = { status: "closed", note: "Sunday" };
+      _renderTodayRecord();
       return;
     }
 
@@ -204,6 +209,7 @@ async function _checkTodayWorkDay() {
     if (!doc.exists) return;
 
     const data = doc.data();
+    _todayWorkDay = data;
     if (data.status === "closed") {
       const msg = data.note ? `Closed today: ${data.note}` : "Today is a closed day — no attendance.";
       if (hint) { hint.textContent = msg; hint.style.color = "var(--danger)"; }
@@ -214,6 +220,7 @@ async function _checkTodayWorkDay() {
       const msg = `Half Day (${data.period?.toUpperCase() || "AM"}) — cutoff: ${data.cutoff || "12:00"}${data.note ? " · " + data.note : ""}`;
       if (hint) { hint.textContent = msg; hint.style.color = "var(--warning)"; }
     }
+    _renderTodayRecord();
   } catch (err) {
     console.warn("Work day check:", err);
   }
@@ -362,6 +369,7 @@ async function checkTodayStatus() {
         checkIn:  records.find((r) => r.type === "check_in")  || null,
         checkOut: records.find((r) => r.type === "check_out") || null
       };
+      _todayRecords = records;
       _renderStatus();
       _renderTodayRecord();
       _updateActionButtons();
@@ -374,25 +382,65 @@ function _renderTodayRecord() {
   if (!date || !body) return;
 
   date.textContent = formatDate(new Date());
-  const checkIn = _todayStatus?.checkIn;
-  const checkOut = _todayStatus?.checkOut;
-  let hours = "—";
+  const records = (_todayRecords || []).slice().sort((a, b) =>
+    (a.timestamp?.toDate?.() || 0) - (b.timestamp?.toDate?.() || 0)
+  );
+  const noon = new Date();
+  noon.setHours(12, 0, 0, 0);
 
-  if (checkIn && checkOut) {
-    const start = checkIn.timestamp?.toDate?.();
-    const end = checkOut.timestamp?.toDate?.();
-    if (start && end) {
-      const minutes = Math.max(0, Math.floor((end - start) / 60000));
-      hours = `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
+  const morning = records.filter((r) => r.timestamp?.toDate?.() < noon);
+  const afternoon = records.filter((r) => r.timestamp?.toDate?.() >= noon);
+  const morningIn = morning.find((r) => r.type === "check_in") || null;
+  const morningOut = [...morning].reverse().find((r) => r.type === "check_out") || null;
+  const afternoonIn = afternoon.find((r) => r.type === "check_in") || null;
+  const afternoonOut = [...afternoon].reverse().find((r) => r.type === "check_out") || null;
+
+  const elapsedMinutes = (checkIn, checkOut) => {
+    const start = checkIn?.timestamp?.toDate?.();
+    const end = checkOut?.timestamp?.toDate?.();
+    return start && end ? Math.max(0, Math.floor((end - start) / 60000)) : 0;
+  };
+  const minutes = elapsedMinutes(morningIn, morningOut) + elapsedMinutes(afternoonIn, afternoonOut);
+  const hours = minutes
+    ? `${Math.floor(minutes / 60)}h ${minutes % 60}m`
+    : (_todayStatus?.checkIn ? "In progress" : "—");
+
+  let status = "Absent";
+  let statusClass = "badge--danger";
+  if (_todayWorkDay?.status === "closed") {
+    const note = String(_todayWorkDay.note || "").toLowerCase();
+    status = note.includes("special") || note.includes("special non-working")
+      ? "Special Non-Working"
+      : note.includes("holiday")
+        ? "Regular Holiday"
+        : "Closed";
+    statusClass = "badge--gray";
+  } else if (_todayWorkDay?.status === "halfday") {
+    status = "Half Day";
+    statusClass = "badge--warning";
+  } else if (_todayStatus?.checkIn) {
+    if (_todayStatus?.checkOut) {
+      const workStart = (_settings?.workStartTime || "08:00").split(":").map(Number);
+      const workEnd = (_settings?.workEndTime || "17:00").split(":").map(Number);
+      const requiredMinutes = Math.max(0,
+        (workEnd[0] * 60 + (workEnd[1] || 0)) -
+        (workStart[0] * 60 + (workStart[1] || 0))
+      );
+      status = minutes < requiredMinutes ? "Undertime" : "Present";
+      statusClass = minutes < requiredMinutes ? "badge--warning" : "badge--success";
+    } else {
+      status = "Present";
+      statusClass = "badge--success";
     }
-  } else if (checkIn) {
-    hours = "In progress";
   }
 
   body.innerHTML = `<tr>
-    <td>${checkIn ? formatTime(checkIn.timestamp) : "—"}</td>
-    <td>${checkOut ? formatTime(checkOut.timestamp) : "—"}</td>
+    <td>${morningIn ? formatTime(morningIn.timestamp) : "—"}</td>
+    <td>${morningOut ? formatTime(morningOut.timestamp) : "—"}</td>
+    <td>${afternoonIn ? formatTime(afternoonIn.timestamp) : "—"}</td>
+    <td>${afternoonOut ? formatTime(afternoonOut.timestamp) : "—"}</td>
     <td>${hours}</td>
+    <td><span class="badge ${statusClass}">${status}</span></td>
   </tr>`;
 }
 
