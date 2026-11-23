@@ -100,7 +100,9 @@
         <div class="card emp-daily-record">
           <div class="emp-daily-record__heading">
             <h3>Daily Time Record</h3>
-            <span class="badge badge--gray">Experimental</span>
+            <button type="button" class="btn btn--secondary btn--sm" onclick="downloadDTRExcel()">
+              Download Excel
+            </button>
           </div>
           <p class="text-sm text-light mb-4" id="todayRecordDate">Today</p>
           <div class="table-wrap">
@@ -273,6 +275,7 @@
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js" defer></script>
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js" defer></script>
   <script src="js/firebase-config.js"></script>
   <script src="js/utils.js" defer></script>
   <script src="js/geo-utils.js" defer></script>

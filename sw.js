@@ -3,7 +3,7 @@
  * Bump CACHE_NAME version to force clients to pick up new files.
  */
 
-const CACHE_NAME = "ecofuels-attendance-v10";
+const CACHE_NAME = "ecofuels-attendance-v11";
 
 const STATIC_ASSETS = [
   "/",

@@ -444,6 +444,85 @@ function _renderTodayRecord() {
   </tr>`;
 }
 
+function downloadDTRExcel() {
+  if (typeof XLSX === "undefined") {
+    showToast("Excel library is not available. Check your connection and try again.", "error");
+    return;
+  }
+
+  const records = (_todayRecords || []).slice().sort((a, b) =>
+    (a.timestamp?.toDate?.() || 0) - (b.timestamp?.toDate?.() || 0)
+  );
+  const noon = new Date();
+  noon.setHours(12, 0, 0, 0);
+
+  const morning = records.filter((r) => r.timestamp?.toDate?.() < noon);
+  const afternoon = records.filter((r) => r.timestamp?.toDate?.() >= noon);
+  const morningIn = morning.find((r) => r.type === "check_in") || null;
+  const morningOut = [...morning].reverse().find((r) => r.type === "check_out") || null;
+  const afternoonIn = afternoon.find((r) => r.type === "check_in") || null;
+  const afternoonOut = [...afternoon].reverse().find((r) => r.type === "check_out") || null;
+
+  const elapsedMinutes = (checkIn, checkOut) => {
+    const start = checkIn?.timestamp?.toDate?.();
+    const end = checkOut?.timestamp?.toDate?.();
+    return start && end ? Math.max(0, Math.floor((end - start) / 60000)) : 0;
+  };
+  const minutes = elapsedMinutes(morningIn, morningOut) +
+    elapsedMinutes(afternoonIn, afternoonOut);
+  const hours = minutes
+    ? `${Math.floor(minutes / 60)}h ${minutes % 60}m`
+    : (_todayStatus?.checkIn ? "In progress" : "—");
+
+  let status = "Absent";
+  if (_todayWorkDay?.status === "closed") {
+    const note = String(_todayWorkDay.note || "").toLowerCase();
+    status = note.includes("special") || note.includes("special non-working")
+      ? "Special Non-Working"
+      : note.includes("holiday")
+        ? "Regular Holiday"
+        : "Closed";
+  } else if (_todayWorkDay?.status === "halfday") {
+    status = "Half Day";
+  } else if (_todayStatus?.checkIn) {
+    if (_todayStatus?.checkOut) {
+      const workStart = (_settings?.workStartTime || "08:00").split(":").map(Number);
+      const workEnd = (_settings?.workEndTime || "17:00").split(":").map(Number);
+      const requiredMinutes =
+        (workEnd[0] * 60 + (workEnd[1] || 0)) -
+        (workStart[0] * 60 + (workStart[1] || 0));
+      status = minutes < requiredMinutes ? "Undertime" : "Present";
+    } else {
+      status = "Present";
+    }
+  }
+
+  const today = new Date();
+  const row = [{
+    Employee: _user?.name || "—",
+    Department: _user?.departmentName || "—",
+    Date: formatDate(today),
+    "Morning Check In": morningIn ? formatTime(morningIn.timestamp) : "—",
+    "Morning Check Out": morningOut ? formatTime(morningOut.timestamp) : "—",
+    "Afternoon Check In": afternoonIn ? formatTime(afternoonIn.timestamp) : "—",
+    "Afternoon Check Out": afternoonOut ? formatTime(afternoonOut.timestamp) : "—",
+    "Total Hours": hours,
+    Status: status
+  }];
+
+  const ws = XLSX.utils.json_to_sheet(row);
+  ws["!cols"] = [
+    { wch: 24 }, { wch: 20 }, { wch: 16 },
+    { wch: 18 }, { wch: 18 }, { wch: 20 }, { wch: 20 },
+    { wch: 14 }, { wch: 20 }
+  ];
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Daily Time Record");
+  XLSX.writeFile(wb, `dtr_${toDateInput(today)}.xlsx`);
+  showToast("Daily Time Record downloaded.", "success");
+}
+
 function _renderStatus() {
   const card = document.getElementById("statusCard");
   const label = document.getElementById("statusLabel");
