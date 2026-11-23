@@ -3,7 +3,7 @@
  * Bump CACHE_NAME version to force clients to pick up new files.
  */
 
-const CACHE_NAME = "ecofuels-attendance-v7";
+const CACHE_NAME = "ecofuels-attendance-v8";
 
 const STATIC_ASSETS = [
   "/",
@@ -64,7 +64,29 @@ self.addEventListener("fetch", (e) => {
   // Skip external origins — let Firebase SDK handle its own requests
   if (url.origin !== self.location.origin) return;
 
-  // Cache-first for our own files
+  const isNavigation = e.request.mode === "navigate";
+  const isAppAsset = /\.(?:html|css|js)$/.test(url.pathname);
+
+  // App HTML/CSS/JS should refresh immediately so PWA updates are visible.
+  if (isNavigation || isAppAsset) {
+    e.respondWith(
+      fetch(e.request)
+        .then((res) => {
+          if (res && res.status === 200) {
+            const clone = res.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(e.request, clone));
+          }
+          return res;
+        })
+        .catch(() => caches.match(e.request).then((cached) => {
+          if (cached) return cached;
+          if (isNavigation) return caches.match("/index.html");
+        }))
+    );
+    return;
+  }
+
+  // Cache-first for other same-origin files
   e.respondWith(
     caches.match(e.request).then((cached) => {
       if (cached) {
