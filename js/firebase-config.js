@@ -29,16 +29,7 @@ const auth = firebase.auth();
 
 // Initialize Firestore with offline persistence
 const db = firebase.firestore();
-// Suppress deprecation warning by not calling enablePersistence directly —
-// instead configure persistence settings before any other Firestore calls.
-try {
-  db.settings({ merge: true });
-  db.enablePersistence({ synchronizeTabs: true }).catch((err) => {
-    if (err.code !== 'failed-precondition' && err.code !== 'unimplemented') {
-      console.warn('Firestore persistence error:', err.code);
-    }
-  });
-} catch (_) {}
+db.enablePersistence({ synchronizeTabs: true }).catch(() => {});
 
 // Storage is optional — we store photos as base64 in Firestore.
 // Keep the reference for potential future use, but don't crash if
