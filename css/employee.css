@@ -33,6 +33,47 @@ body { background: var(--bg); }
   font-weight: 700;
 }
 
+/* ---- Resizable cards ---- */
+/* Each card in the employee panel gets a resize handle on the right edge */
+.emp-container .card {
+  position: relative;
+  resize: horizontal;
+  overflow: auto;
+  min-width: 280px;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+/* Custom resize grip indicator — bottom-right corner */
+.emp-container .card::after {
+  content: "";
+  position: absolute;
+  bottom: 4px;
+  right: 4px;
+  width: 12px;
+  height: 12px;
+  background: linear-gradient(
+    135deg,
+    transparent 40%,
+    var(--border) 40%,
+    var(--border) 55%,
+    transparent 55%,
+    transparent 70%,
+    var(--border) 70%,
+    var(--border) 85%,
+    transparent 85%
+  );
+  pointer-events: none;
+  opacity: 0.6;
+  border-radius: 2px;
+}
+
+.emp-container .card:hover::after { opacity: 1; }
+
+/* Chat panel fills full height — no resize needed */
+.emp-chat-wrap .card { resize: none; }
+.emp-chat-wrap .card::after { display: none; }
+
 /* ---- Header ---- */
 .emp-header {
   background: var(--card);
@@ -91,13 +132,14 @@ body { background: var(--bg); }
 /* ---- Container (attendance + requests panels) ---- */
 .emp-container {
   width: 100%;
-  max-width: 720px;
+  max-width: none;        /* remove width cap — full width now */
   margin: 24px auto;
   padding: 0 16px;
   display: flex;
   flex-direction: column;
   gap: 20px;
   min-width: 0;
+}
 }
 
 .attendance-workspace {
