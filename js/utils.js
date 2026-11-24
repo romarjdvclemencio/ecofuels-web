@@ -37,6 +37,22 @@ function _ensureToastContainer() {
 /* ------------------------------------------------------------------ */
 /* Manual card and panel resizing                                     */
 /* ------------------------------------------------------------------ */
+
+/** Clear all saved panel sizes for the current page — call to reset layout */
+function resetAllPanelSizes() {
+  const page   = location.pathname.split("/").pop() || "index.html";
+  const prefix = `ecofuels-panel-size:${page}:`;
+  Object.keys(localStorage)
+    .filter((k) => k.startsWith(prefix))
+    .forEach((k) => localStorage.removeItem(k));
+  // Remove inline sizes from all resizable panels
+  document.querySelectorAll(".manual-resizable").forEach((el) => {
+    el.style.removeProperty("width");
+    el.style.removeProperty("height");
+    el.style.removeProperty("flex");
+  });
+  showToast("Layout reset to default.", "success");
+}
 function initManualResizing() {
   const selectors = [
     ".card",
@@ -48,11 +64,23 @@ function initManualResizing() {
     ".attendance-workspace"
   ].join(",");
 
+  // Cards that should NEVER be user-resized (they have fixed layouts)
+  const excludeSelectors = [
+    ".emp-camera-card",   // camera card — must stay natural size
+    ".status-card",       // status card — compact by design
+    ".chat-layout",       // chat has its own layout
+    ".modal",             // modals are fixed size
+    "#panel-chat"         // chat panel
+  ];
+
   const page = location.pathname.split("/").pop() || "index.html";
   const storagePrefix = `ecofuels-panel-size:${page}:`;
 
   document.querySelectorAll(selectors).forEach((panel, index) => {
     if (panel.classList.contains("manual-resizable")) return;
+
+    // Skip excluded elements
+    if (excludeSelectors.some((sel) => panel.matches(sel))) return;
 
     panel.classList.add("manual-resizable");
     const key = `${storagePrefix}${index}:${panel.className}`;
