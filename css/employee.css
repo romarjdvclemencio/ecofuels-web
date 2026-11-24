@@ -45,7 +45,6 @@ body { background: var(--bg); }
 /* DTR card specifically gets horizontal resize */
 .emp-daily-record {
   resize: horizontal;
-  overflow: auto;
   min-width: 300px;
   max-width: 100%;
 }

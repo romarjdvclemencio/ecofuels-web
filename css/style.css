@@ -39,13 +39,6 @@ body {
   color: var(--text);
   line-height: 1.5;
   min-height: 100vh;
-  min-width: 0;
-  overflow-x: hidden;
-}
-
-html, body {
-  max-width: 100%;
-  overscroll-behavior-x: none;
 }
 
 a { color: var(--primary); text-decoration: none; }
@@ -299,10 +292,7 @@ h1, h2, h3, h4 { font-weight: 600; line-height: 1.3; }
 /* ---- Manual panel resizing ---- */
 .manual-resizable {
   position: relative;
-  overflow: auto;
   max-width: 100%;
-  max-height: calc(100vh - 24px);
-  max-height: calc(100dvh - 24px);
   transition: none;
 }
 
@@ -315,7 +305,7 @@ h1, h2, h3, h4 { font-weight: 600; line-height: 1.3; }
   height: 22px;
   cursor: nwse-resize;
   touch-action: none;
-  opacity: .65;
+  opacity: .4;
 }
 
 .panel-resize-handle::before,
