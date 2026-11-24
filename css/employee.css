@@ -34,24 +34,30 @@ body { background: var(--bg); }
 }
 
 /* ---- Resizable cards ---- */
-/* Each card in the employee panel gets a resize handle on the right edge */
+/* Only the DTR card is resizable — other cards stay full width */
 .emp-container .card {
   position: relative;
-  resize: horizontal;
-  overflow: auto;
-  min-width: 280px;
-  max-width: 100%;
+  width: 100%;
   box-sizing: border-box;
+  min-width: 0;
 }
 
-/* Custom resize grip indicator — bottom-right corner */
-.emp-container .card::after {
+/* DTR card specifically gets horizontal resize */
+.emp-daily-record {
+  resize: horizontal;
+  overflow: auto;
+  min-width: 300px;
+  max-width: 100%;
+}
+
+/* Resize grip indicator on DTR */
+.emp-daily-record::after {
   content: "";
   position: absolute;
-  bottom: 4px;
-  right: 4px;
-  width: 12px;
-  height: 12px;
+  bottom: 6px;
+  right: 6px;
+  width: 14px;
+  height: 14px;
   background: linear-gradient(
     135deg,
     transparent 40%,
@@ -64,15 +70,9 @@ body { background: var(--bg); }
     transparent 85%
   );
   pointer-events: none;
-  opacity: 0.6;
-  border-radius: 2px;
+  opacity: 0.5;
 }
-
-.emp-container .card:hover::after { opacity: 1; }
-
-/* Chat panel fills full height — no resize needed */
-.emp-chat-wrap .card { resize: none; }
-.emp-chat-wrap .card::after { display: none; }
+.emp-daily-record:hover::after { opacity: 1; }
 
 /* ---- Header ---- */
 .emp-header {
