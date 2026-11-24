@@ -4,6 +4,35 @@
 
 body { background: var(--bg); }
 
+/* ---- DTR month picker heading ---- */
+.emp-daily-record__heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+#dtrMonthPicker {
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: .85rem;
+  font-family: inherit;
+  background: var(--card);
+}
+
+/* ---- DTR table row styles ---- */
+.dtr-row--today td { background: var(--primary-light); font-weight: 600; }
+.dtr-row--sunday td { color: var(--danger); background: #fff5f5; }
+.dtr-row--saturday td { color: var(--info); background: #f0f8ff; }
+.dtr-row--total td {
+  background: #f0fdf4;
+  border-top: 2px solid var(--primary);
+  font-weight: 700;
+}
+
 /* ---- Header ---- */
 .emp-header {
   background: var(--card);

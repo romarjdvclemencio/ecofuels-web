@@ -96,19 +96,24 @@
           <div class="form-hint mt-2" id="faceHint"></div>
         </div>
 
-        <!-- Experimental daily time record -->
+        <!-- Daily Time Record -->
         <div class="card emp-daily-record">
           <div class="emp-daily-record__heading">
             <h3>Daily Time Record</h3>
-            <button type="button" class="btn btn--secondary btn--sm" onclick="downloadDTRExcel()">
-              Download Excel
-            </button>
+            <div class="flex gap-2 items-center">
+              <input type="month" id="dtrMonthPicker" onchange="loadDTRMonth()" />
+              <button type="button" class="btn btn--secondary btn--sm" onclick="downloadDTRExcel()">
+                Download Excel
+              </button>
+            </div>
           </div>
-          <p class="text-sm text-light mb-4" id="todayRecordDate">Today</p>
+          <p class="text-sm text-light mb-4" id="dtrMonthLabel">—</p>
           <div class="table-wrap">
             <table>
               <thead>
                 <tr>
+                  <th rowspan="2">Date</th>
+                  <th rowspan="2">Day</th>
                   <th colspan="2" class="text-center">Morning (AM)</th>
                   <th colspan="2" class="text-center">Afternoon (PM)</th>
                   <th rowspan="2" class="text-center">Total Hours</th>
@@ -121,8 +126,8 @@
                   <th>Check Out</th>
                 </tr>
               </thead>
-              <tbody id="todayRecordBody">
-                <tr><td colspan="6" class="text-center text-light">Loading...</td></tr>
+              <tbody id="dtrBody">
+                <tr><td colspan="8" class="text-center text-light">Loading...</td></tr>
               </tbody>
             </table>
           </div>

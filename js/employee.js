@@ -61,6 +61,9 @@ document.addEventListener("DOMContentLoaded", () => {
       // Check today's work day status and show notice if restricted
       _checkTodayWorkDay();
 
+      // Load DTR for current month
+      loadDTRMonth();
+
       // Pre-load face models in background immediately (don't await — let it run)
       loadFaceModels().then(() => {
         console.log("Face models ready.");
@@ -376,72 +379,161 @@ async function checkTodayStatus() {
     }, (err) => console.error("Status check error:", err));
 }
 
-function _renderTodayRecord() {
-  const date = document.getElementById("todayRecordDate");
-  const body = document.getElementById("todayRecordBody");
-  if (!date || !body) return;
+/* ================================================================== */
+/*  Daily Time Record — full month view                               */
+/* ================================================================== */
 
-  date.textContent = formatDate(new Date());
-  const records = (_todayRecords || []).slice().sort((a, b) =>
-    (a.timestamp?.toDate?.() || 0) - (b.timestamp?.toDate?.() || 0)
-  );
-  const noon = new Date();
-  noon.setHours(12, 0, 0, 0);
+let _dtrRecords  = [];   // all attendance records for selected month
+let _dtrYear     = 0;
+let _dtrMonth    = 0;    // 0-indexed
 
-  const morning = records.filter((r) => r.timestamp?.toDate?.() < noon);
-  const afternoon = records.filter((r) => r.timestamp?.toDate?.() >= noon);
-  const morningIn = morning.find((r) => r.type === "check_in") || null;
-  const morningOut = [...morning].reverse().find((r) => r.type === "check_out") || null;
-  const afternoonIn = afternoon.find((r) => r.type === "check_in") || null;
-  const afternoonOut = [...afternoon].reverse().find((r) => r.type === "check_out") || null;
+/** Called on page init and when month picker changes */
+async function loadDTRMonth() {
+  const picker = document.getElementById("dtrMonthPicker");
+  const label  = document.getElementById("dtrMonthLabel");
+  const body   = document.getElementById("dtrBody");
+  if (!body) return;
 
-  const elapsedMinutes = (checkIn, checkOut) => {
-    const start = checkIn?.timestamp?.toDate?.();
-    const end = checkOut?.timestamp?.toDate?.();
-    return start && end ? Math.max(0, Math.floor((end - start) / 60000)) : 0;
-  };
-  const minutes = elapsedMinutes(morningIn, morningOut) + elapsedMinutes(afternoonIn, afternoonOut);
-  const hours = minutes
-    ? `${Math.floor(minutes / 60)}h ${minutes % 60}m`
-    : (_todayStatus?.checkIn ? "In progress" : "—");
-
-  let status = "Absent";
-  let statusClass = "badge--danger";
-  if (_todayWorkDay?.status === "closed") {
-    const note = String(_todayWorkDay.note || "").toLowerCase();
-    status = note.includes("special") || note.includes("special non-working")
-      ? "Special Non-Working"
-      : note.includes("holiday")
-        ? "Regular Holiday"
-        : "Closed";
-    statusClass = "badge--gray";
-  } else if (_todayWorkDay?.status === "halfday") {
-    status = "Half Day";
-    statusClass = "badge--warning";
-  } else if (_todayStatus?.checkIn) {
-    if (_todayStatus?.checkOut) {
-      const workStart = (_settings?.workStartTime || "08:00").split(":").map(Number);
-      const workEnd = (_settings?.workEndTime || "17:00").split(":").map(Number);
-      const requiredMinutes = Math.max(0,
-        (workEnd[0] * 60 + (workEnd[1] || 0)) -
-        (workStart[0] * 60 + (workStart[1] || 0))
-      );
-      status = minutes < requiredMinutes ? "Undertime" : "Present";
-      statusClass = minutes < requiredMinutes ? "badge--warning" : "badge--success";
-    } else {
-      status = "Present";
-      statusClass = "badge--success";
-    }
+  // Default to current month if picker not changed
+  const now = new Date();
+  if (!picker.value) {
+    picker.value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
   }
 
-  body.innerHTML = `<tr>
-    <td>${morningIn ? formatTime(morningIn.timestamp) : "—"}</td>
-    <td>${morningOut ? formatTime(morningOut.timestamp) : "—"}</td>
-    <td>${afternoonIn ? formatTime(afternoonIn.timestamp) : "—"}</td>
-    <td>${afternoonOut ? formatTime(afternoonOut.timestamp) : "—"}</td>
-    <td>${hours}</td>
-    <td><span class="badge ${statusClass}">${status}</span></td>
+  const [y, m] = picker.value.split("-").map(Number);
+  _dtrYear  = y;
+  _dtrMonth = m - 1; // 0-indexed
+
+  const monthName = new Date(y, _dtrMonth, 1).toLocaleDateString("en-PH", { month: "long", year: "numeric" });
+  if (label) label.textContent = `${_user?.name || ""} — ${monthName}`;
+
+  body.innerHTML = `<tr><td colspan="8" class="text-center text-light">Loading...</td></tr>`;
+
+  // Fetch all attendance records for this employee (no date filter — client-side filter)
+  if (_empUnsubs.dtr) { _empUnsubs.dtr(); _empUnsubs.dtr = null; }
+
+  _empUnsubs.dtr = db.collection("attendance")
+    .where("employeeId", "==", _user.uid)
+    .onSnapshot((snap) => {
+      _dtrRecords = snap.docs
+        .map((d) => d.data())
+        .filter((r) => {
+          const t = r.timestamp?.toDate();
+          return t && t.getFullYear() === _dtrYear && t.getMonth() === _dtrMonth;
+        });
+      _renderDTR();
+    }, (err) => {
+      console.error("DTR load error:", err);
+      body.innerHTML = `<tr><td colspan="8" class="text-center text-light">Error loading DTR.</td></tr>`;
+    });
+}
+
+function _renderDTR() {
+  const body = document.getElementById("dtrBody");
+  if (!body) return;
+
+  const daysInMonth = new Date(_dtrYear, _dtrMonth + 1, 0).getDate();
+  const dayNames    = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+  const noon        = 12 * 60; // minutes
+
+  // Group records by date string YYYY-MM-DD
+  const byDay = {};
+  _dtrRecords.forEach((r) => {
+    const t = r.timestamp?.toDate();
+    if (!t) return;
+    const key = _fmt(t);
+    if (!byDay[key]) byDay[key] = [];
+    byDay[key].push(r);
+  });
+
+  let html = "";
+  let totalMins = 0;
+
+  for (let d = 1; d <= daysInMonth; d++) {
+    const date    = new Date(_dtrYear, _dtrMonth, d);
+    const dateKey = _fmt(date);
+    const dow     = date.getDay();
+    const isSun   = dow === 0;
+    const isSat   = dow === 6;
+    const records = (byDay[dateKey] || []).sort((a, b) =>
+      a.timestamp?.toDate() - b.timestamp?.toDate()
+    );
+
+    // Split by noon
+    const toMin = (ts) => {
+      const t = ts?.toDate?.();
+      return t ? t.getHours() * 60 + t.getMinutes() : null;
+    };
+
+    const amRecs  = records.filter((r) => { const m = toMin(r.timestamp); return m !== null && m < noon; });
+    const pmRecs  = records.filter((r) => { const m = toMin(r.timestamp); return m !== null && m >= noon; });
+
+    const amIn    = amRecs.find((r)  => r.type === "check_in")  || null;
+    const amOut   = [...amRecs].reverse().find((r) => r.type === "check_out") || null;
+    const pmIn    = pmRecs.find((r)  => r.type === "check_in")  || null;
+    const pmOut   = [...pmRecs].reverse().find((r) => r.type === "check_out") || null;
+
+    // Calculate hours
+    const elapsed = (ci, co) => {
+      const s = ci?.timestamp?.toDate?.();
+      const e = co?.timestamp?.toDate?.();
+      return s && e ? Math.max(0, Math.floor((e - s) / 60000)) : 0;
+    };
+    const dayMins = elapsed(amIn, amOut) + elapsed(pmIn, pmOut);
+    totalMins += dayMins;
+
+    const hoursStr = dayMins
+      ? `${Math.floor(dayMins / 60)}h ${dayMins % 60}m`
+      : "—";
+
+    // Status
+    let status = "", statusClass = "";
+    if (isSun) {
+      status = "Rest Day"; statusClass = "badge--gray";
+    } else if (isSat) {
+      status = "Saturday"; statusClass = "badge--gray";
+    } else if (records.length === 0) {
+      status = "Absent"; statusClass = "badge--danger";
+    } else if (amIn || pmIn) {
+      status = "Present"; statusClass = "badge--success";
+      if (!amOut && !pmOut) { status = "No Out"; statusClass = "badge--warning"; }
+    }
+
+    // Row style for weekends / today
+    const isToday  = dateKey === _fmt(new Date());
+    let rowClass   = "";
+    if (isToday)   rowClass = "dtr-row--today";
+    if (isSun)     rowClass = "dtr-row--sunday";
+    else if (isSat) rowClass = "dtr-row--saturday";
+
+    html += `<tr class="${rowClass}">
+      <td class="text-sm">${date.toLocaleDateString("en-PH", { month: "short", day: "numeric" })}</td>
+      <td class="text-sm">${dayNames[dow]}</td>
+      <td class="text-sm">${amIn  ? formatTime(amIn.timestamp)  : "—"}</td>
+      <td class="text-sm">${amOut ? formatTime(amOut.timestamp) : "—"}</td>
+      <td class="text-sm">${pmIn  ? formatTime(pmIn.timestamp)  : "—"}</td>
+      <td class="text-sm">${pmOut ? formatTime(pmOut.timestamp) : "—"}</td>
+      <td class="text-sm">${hoursStr}</td>
+      <td>${status ? `<span class="badge ${statusClass}">${status}</span>` : ""}</td>
+    </tr>`;
+  }
+
+  // Summary footer
+  const totalH = Math.floor(totalMins / 60);
+  const totalM = totalMins % 60;
+  html += `<tr class="dtr-row--total">
+    <td colspan="6" class="text-sm" style="font-weight:700;text-align:right;">Total Hours This Month:</td>
+    <td class="text-sm" style="font-weight:700;">${totalH}h ${totalM}m</td>
+    <td></td>
   </tr>`;
+
+  body.innerHTML = html;
+}
+
+/** Keep _renderTodayRecord working for the status listener */
+function _renderTodayRecord() {
+  // Today's row is now rendered inside _renderDTR when current month is shown
+  // This stub prevents errors from the checkTodayStatus listener
 }
 
 function downloadDTRExcel() {
@@ -450,77 +542,91 @@ function downloadDTRExcel() {
     return;
   }
 
-  const records = (_todayRecords || []).slice().sort((a, b) =>
-    (a.timestamp?.toDate?.() || 0) - (b.timestamp?.toDate?.() || 0)
-  );
-  const noon = new Date();
-  noon.setHours(12, 0, 0, 0);
+  const daysInMonth = new Date(_dtrYear, _dtrMonth + 1, 0).getDate();
+  const dayNames    = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+  const noon        = 12 * 60;
 
-  const morning = records.filter((r) => r.timestamp?.toDate?.() < noon);
-  const afternoon = records.filter((r) => r.timestamp?.toDate?.() >= noon);
-  const morningIn = morning.find((r) => r.type === "check_in") || null;
-  const morningOut = [...morning].reverse().find((r) => r.type === "check_out") || null;
-  const afternoonIn = afternoon.find((r) => r.type === "check_in") || null;
-  const afternoonOut = [...afternoon].reverse().find((r) => r.type === "check_out") || null;
+  // Group records by date
+  const byDay = {};
+  (_dtrRecords || []).forEach((r) => {
+    const t = r.timestamp?.toDate();
+    if (!t) return;
+    const key = _fmt(t);
+    if (!byDay[key]) byDay[key] = [];
+    byDay[key].push(r);
+  });
 
-  const elapsedMinutes = (checkIn, checkOut) => {
-    const start = checkIn?.timestamp?.toDate?.();
-    const end = checkOut?.timestamp?.toDate?.();
-    return start && end ? Math.max(0, Math.floor((end - start) / 60000)) : 0;
-  };
-  const minutes = elapsedMinutes(morningIn, morningOut) +
-    elapsedMinutes(afternoonIn, afternoonOut);
-  const hours = minutes
-    ? `${Math.floor(minutes / 60)}h ${minutes % 60}m`
-    : (_todayStatus?.checkIn ? "In progress" : "—");
+  const rows = [];
+  let totalMins = 0;
 
-  let status = "Absent";
-  if (_todayWorkDay?.status === "closed") {
-    const note = String(_todayWorkDay.note || "").toLowerCase();
-    status = note.includes("special") || note.includes("special non-working")
-      ? "Special Non-Working"
-      : note.includes("holiday")
-        ? "Regular Holiday"
-        : "Closed";
-  } else if (_todayWorkDay?.status === "halfday") {
-    status = "Half Day";
-  } else if (_todayStatus?.checkIn) {
-    if (_todayStatus?.checkOut) {
-      const workStart = (_settings?.workStartTime || "08:00").split(":").map(Number);
-      const workEnd = (_settings?.workEndTime || "17:00").split(":").map(Number);
-      const requiredMinutes =
-        (workEnd[0] * 60 + (workEnd[1] || 0)) -
-        (workStart[0] * 60 + (workStart[1] || 0));
-      status = minutes < requiredMinutes ? "Undertime" : "Present";
-    } else {
-      status = "Present";
-    }
+  for (let d = 1; d <= daysInMonth; d++) {
+    const date    = new Date(_dtrYear, _dtrMonth, d);
+    const dateKey = _fmt(date);
+    const dow     = date.getDay();
+    const records = (byDay[dateKey] || []).sort((a, b) =>
+      a.timestamp?.toDate() - b.timestamp?.toDate()
+    );
+
+    const toMin = (ts) => { const t = ts?.toDate?.(); return t ? t.getHours() * 60 + t.getMinutes() : null; };
+    const amRecs  = records.filter((r) => { const m = toMin(r.timestamp); return m !== null && m < noon; });
+    const pmRecs  = records.filter((r) => { const m = toMin(r.timestamp); return m !== null && m >= noon; });
+    const amIn    = amRecs.find((r) => r.type === "check_in")  || null;
+    const amOut   = [...amRecs].reverse().find((r) => r.type === "check_out") || null;
+    const pmIn    = pmRecs.find((r) => r.type === "check_in")  || null;
+    const pmOut   = [...pmRecs].reverse().find((r) => r.type === "check_out") || null;
+
+    const elapsed = (ci, co) => {
+      const s = ci?.timestamp?.toDate?.(); const e = co?.timestamp?.toDate?.();
+      return s && e ? Math.max(0, Math.floor((e - s) / 60000)) : 0;
+    };
+    const dayMins = elapsed(amIn, amOut) + elapsed(pmIn, pmOut);
+    totalMins += dayMins;
+
+    let status = dow === 0 ? "Rest Day" : dow === 6 ? "Saturday" :
+      records.length === 0 ? "Absent" :
+      (amIn || pmIn) ? ((!amOut && !pmOut) ? "No Out" : "Present") : "Absent";
+
+    rows.push({
+      "Date":               date.toLocaleDateString("en-PH", { year: "numeric", month: "short", day: "numeric" }),
+      "Day":                dayNames[dow],
+      "AM Check In":        amIn  ? formatTime(amIn.timestamp)  : "—",
+      "AM Check Out":       amOut ? formatTime(amOut.timestamp) : "—",
+      "PM Check In":        pmIn  ? formatTime(pmIn.timestamp)  : "—",
+      "PM Check Out":       pmOut ? formatTime(pmOut.timestamp) : "—",
+      "Total Hours":        dayMins ? `${Math.floor(dayMins/60)}h ${dayMins%60}m` : "—",
+      "Status":             status
+    });
   }
 
-  const today = new Date();
-  const row = [{
-    Employee: _user?.name || "—",
-    Department: _user?.departmentName || "—",
-    Date: formatDate(today),
-    "Morning Check In": morningIn ? formatTime(morningIn.timestamp) : "—",
-    "Morning Check Out": morningOut ? formatTime(morningOut.timestamp) : "—",
-    "Afternoon Check In": afternoonIn ? formatTime(afternoonIn.timestamp) : "—",
-    "Afternoon Check Out": afternoonOut ? formatTime(afternoonOut.timestamp) : "—",
-    "Total Hours": hours,
-    Status: status
-  }];
+  // Summary row
+  rows.push({
+    "Date": "", "Day": "", "AM Check In": "", "AM Check Out": "",
+    "PM Check In": "", "PM Check Out": "",
+    "Total Hours": `${Math.floor(totalMins/60)}h ${totalMins%60}m`,
+    "Status": "TOTAL"
+  });
 
-  const ws = XLSX.utils.json_to_sheet(row);
+  const monthStr = new Date(_dtrYear, _dtrMonth, 1)
+    .toLocaleDateString("en-PH", { month: "long", year: "numeric" });
+
+  const ws = XLSX.utils.json_to_sheet(rows);
   ws["!cols"] = [
-    { wch: 24 }, { wch: 20 }, { wch: 16 },
-    { wch: 18 }, { wch: 18 }, { wch: 20 }, { wch: 20 },
-    { wch: 14 }, { wch: 20 }
+    { wch: 18 }, { wch: 6 }, { wch: 14 }, { wch: 14 },
+    { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 16 }
   ];
 
+  // Add header info above the table
+  XLSX.utils.sheet_add_aoa(ws, [
+    ["DAILY TIME RECORD"],
+    [`Employee: ${_user?.name || ""}`, "", `Department: ${_user?.departmentName || ""}`],
+    [`Period: ${monthStr}`],
+    []
+  ], { origin: "A1" });
+
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "Daily Time Record");
-  XLSX.writeFile(wb, `dtr_${toDateInput(today)}.xlsx`);
-  showToast("Daily Time Record downloaded.", "success");
+  XLSX.utils.book_append_sheet(wb, ws, "DTR");
+  XLSX.writeFile(wb, `DTR_${_user?.name?.replace(/\s+/g,"_") || "employee"}_${_dtrYear}-${String(_dtrMonth+1).padStart(2,"0")}.xlsx`);
+  showToast("DTR downloaded.", "success");
 }
 
 function _renderStatus() {
