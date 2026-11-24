@@ -6,6 +6,7 @@
 .chat-layout {
   display: flex;
   height: calc(100vh - 200px);
+  height: calc(100dvh - 200px);
   min-height: 420px;
   gap: 0;
   border-radius: var(--radius);

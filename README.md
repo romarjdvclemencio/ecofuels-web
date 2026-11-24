@@ -16,6 +16,7 @@ A web-based company attendance system with camera photo capture, GPS geofencing,
 
 - **Employee Attendance**
   - Check-in and check-out with live camera capture
+  - Experimental daily time record summary beside the check-in/out controls
   - Automatic GPS geolocation with geofence verification
   - Face recognition verification against reference photo
   - One-device-per-employee enforcement

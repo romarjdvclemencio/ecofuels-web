@@ -61,19 +61,41 @@ body { background: var(--bg); }
 
 /* ---- Container (attendance + requests panels) ---- */
 .emp-container {
+  width: 100%;
   max-width: 720px;
   margin: 24px auto;
   padding: 0 16px;
   display: flex;
   flex-direction: column;
   gap: 20px;
+  min-width: 0;
 }
+
+.attendance-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+  align-items: start;
+  gap: 20px;
+  width: 100%;
+  min-width: 0;
+}
+.emp-daily-record { min-width: 0; }
+.emp-daily-record__heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.emp-daily-record__heading h3 { margin: 0; }
 
 /* ---- Chat panel ---- */
 .emp-chat-wrap {
   height: calc(100vh - 110px);
+  height: calc(100dvh - 110px);
   display: flex;
   flex-direction: column;
+  min-height: 0;
 }
 .emp-chat-wrap .chat-layout {
   flex: 1;
@@ -155,6 +177,10 @@ body { background: var(--bg); }
 
 @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
 
+@media (max-width: 700px) {
+  .attendance-workspace { grid-template-columns: 1fr; }
+}
+
 /* ---- Camera controls ---- */
 .camera-controls {
   display: flex;
@@ -196,9 +222,22 @@ body { background: var(--bg); }
   .emp-header { padding: 10px 14px; }
   .emp-header__left h1 { font-size: 1rem; }
   .emp-container { padding: 0 10px; margin-top: 14px; gap: 14px; }
+  .attendance-workspace { gap: 14px; }
   .status-card { padding: 14px 16px; }
   .camera-controls .btn--lg { width: 100%; }
   .emp-chat-wrap { height: calc(100vh - 106px); }
+  .emp-chat-wrap { height: calc(100dvh - 106px); }
+  .emp-daily-record { padding: 14px 10px; }
+  .emp-daily-record table { min-width: 620px; }
+  .emp-daily-record th,
+  .emp-daily-record td { padding: 8px 6px; }
+  .emp-header__info { max-width: 55vw; }
+  .emp-header__info span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .emp-tab { font-size: .78rem; padding-inline: 4px; }
+  .modal { width: calc(100% - 20px); }
+  .modal__header { padding: 16px; }
+  .modal__body { padding: 16px; }
+  .modal__footer { padding: 12px 16px; }
 }
 
 /* ---- Un-mirror front camera — show natural (non-selfie) view ---- */
