@@ -45,7 +45,6 @@ function resetAllPanelSizes() {
   Object.keys(localStorage)
     .filter((k) => k.startsWith(prefix))
     .forEach((k) => localStorage.removeItem(k));
-  // Remove inline sizes from all resizable panels
   document.querySelectorAll(".manual-resizable").forEach((el) => {
     el.style.removeProperty("width");
     el.style.removeProperty("height");
@@ -53,7 +52,19 @@ function resetAllPanelSizes() {
   });
   showToast("Layout reset to default.", "success");
 }
+
+// On employee page — immediately wipe any stale saved sizes
+if (location.pathname.includes("employee")) {
+  try {
+    Object.keys(localStorage)
+      .filter((k) => k.startsWith("ecofuels-panel-size:employee"))
+      .forEach((k) => localStorage.removeItem(k));
+  } catch (_) {}
+}
 function initManualResizing() {
+  // Disabled on employee page — cards flow naturally
+  if (location.pathname.includes("employee")) return;
+
   const selectors = [
     ".card",
     ".emp-panel",
@@ -64,13 +75,13 @@ function initManualResizing() {
     ".attendance-workspace"
   ].join(",");
 
-  // Cards that should NEVER be user-resized (they have fixed layouts)
+  // Cards that should NEVER be user-resized
   const excludeSelectors = [
-    ".emp-camera-card",   // camera card — must stay natural size
-    ".status-card",       // status card — compact by design
-    ".chat-layout",       // chat has its own layout
-    ".modal",             // modals are fixed size
-    "#panel-chat"         // chat panel
+    ".emp-camera-card",
+    ".status-card",
+    ".chat-layout",
+    ".modal",
+    "#panel-chat"
   ];
 
   const page = location.pathname.split("/").pop() || "index.html";
